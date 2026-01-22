@@ -1,13 +1,15 @@
 import json
 from openai import OpenAI
-from config import settings
 from agent.prompts import SYSTEM_PROMPT, PLANNING_PROMPT
+from config import settings
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 class Agent:
-
     def process_request(self, message: str, user_id: str, context: list):
+        """
+        Send user message + context to OpenAI and parse JSON plan
+        """
         prompt = PLANNING_PROMPT.format(message=message)
 
         response = client.chat.completions.create(

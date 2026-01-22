@@ -1,15 +1,17 @@
 from fastapi import APIRouter
 from agent.core import Agent
 from agent.tools import execute_tool
+from agent.schemas import ExecuteRequest
 
 router = APIRouter()
 
 @router.post("/respond")
-def execute_command(message: str, user_id: str):
-    agent = Agent()
+def execute_command(request: ExecuteRequest):
+    message = request.message
+    user_id = request.user_id
 
-    result_context = []
-    result_context.append({"role": "user", "content": message})
+    agent = Agent()
+    result_context = [{"role": "user", "content": message}]
 
     plan_response = agent.process_request(
         message=message,
@@ -17,16 +19,18 @@ def execute_command(message: str, user_id: str):
         context=result_context
     )
 
-    plans = plan_response["plans"]
+    plans = plan_response.get("plans", [])
+    results = []
 
     for plan in plans:
-        result = execute_tool(plan)
-        result_context.append({
-            "role": "tool",
-            "content": result
-        })
+        try:
+            res = execute_tool(plan)
+            results.append({"plan": plan, "result": res})
+            result_context.append({"role": "tool", "content": res})
+        except Exception as e:
+            results.append({"plan": plan, "error": str(e)})
 
-    final_response = agent.process_request(
+    final_summary = agent.process_request(
         message="Generate a summary of actions taken",
         user_id=user_id,
         context=result_context
@@ -34,5 +38,6 @@ def execute_command(message: str, user_id: str):
 
     return {
         "status": "completed",
-        "summary": final_response["message"]
+        "results": results,
+        "summary": final_summary.get("message", "")
     }
