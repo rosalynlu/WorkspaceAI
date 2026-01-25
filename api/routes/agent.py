@@ -1,7 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from agent.core import Agent
 from agent.tools import execute_tool
 from agent.schemas import ExecuteRequest
+from db import users_collection
 
 router = APIRouter()
 
@@ -10,36 +11,73 @@ def execute_command(request: ExecuteRequest):
     message = request.message
     user_id = request.user_id
 
+    # 1️⃣ Validate user exists
+    user = users_collection.find_one({"user_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User '{user_id}' not found")
+
+    # 2️⃣ Initialize agent and context
     agent = Agent()
     result_context = [{"role": "user", "content": message}]
 
-    plan_response = agent.process_request(
-        message=message,
-        user_id=user_id,
-        context=result_context,
-        mode="plan"
-    )
+    # 3️⃣ Get planning response from AI
+    try:
+        plan_response = agent.process_request(
+            message=message,
+            user_id=user_id,
+            context=result_context,
+            mode="plan"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Agent planning failed: {str(e)}")
 
+    # 4️⃣ Validate plans
     plans = plan_response.get("plans", [])
+    if not isinstance(plans, list):
+        raise HTTPException(status_code=500, detail="Agent returned invalid 'plans' format")
+
     results = []
 
     for plan in plans:
+        # Validate each plan
+        if not isinstance(plan, dict):
+            results.append({"plan": plan, "error": "Plan is not a dictionary"})
+            continue
+
+        fn = plan.get("function_name")
+        args = plan.get("arguments", {})
+
+        if not fn:
+            results.append({"plan": plan, "error": "Missing function_name"})
+            continue
+
+        if not isinstance(args, dict):
+            results.append({"plan": plan, "error": "Arguments must be a dictionary"})
+            continue
+
+        # 5️⃣ Execute tool safely
         try:
             res = execute_tool(plan)
             results.append({"plan": plan, "result": res})
+            # Add tool output to context
             result_context.append({"role": "tool", "content": res})
         except Exception as e:
             results.append({"plan": plan, "error": str(e)})
 
-    final_summary = agent.process_request(
-        message="Summarize actions taken",
-        user_id=user_id,
-        context=result_context,
-        mode="summarize"
-    )
+    # 6️⃣ Final summary from AI
+    try:
+        final_summary = agent.process_request(
+            message="Summarize actions taken",
+            user_id=user_id,
+            context=result_context,
+            mode="summarize"
+        )
+        summary_text = final_summary.get("message", "")
+    except Exception as e:
+        summary_text = f"Summary generation failed: {str(e)}"
 
     return {
         "status": "completed",
         "results": results,
-        "summary": final_summary.get("message", "")
+        "summary": summary_text
     }
