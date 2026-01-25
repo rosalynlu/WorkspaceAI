@@ -1,7 +1,27 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from uuid import uuid4
+from datetime import datetime
+
+from models.user import UserCreate
+from utils.security import hash_password
+from db import users_collection
 
 router = APIRouter()
 
-@router.get("/login")
-def login():
-    return {"message": "OAuth login not implemented yet"}
+@router.post("/register")
+def register_user(user: UserCreate):
+    existing = users_collection.find_one({"username": user.username})
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+
+    user_id = str(uuid4())
+
+    users_collection.insert_one({
+        "user_id": user_id,
+        "username": user.username,
+        "password_hash": hash_password(user.password),
+        "email": user.email,
+        "created_at": datetime.utcnow()
+    })
+
+    return {"status": "registered", "user_id": user_id}

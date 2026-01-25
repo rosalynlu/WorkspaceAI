@@ -16,7 +16,8 @@ def execute_command(request: ExecuteRequest):
     plan_response = agent.process_request(
         message=message,
         user_id=user_id,
-        context=result_context
+        context=result_context,
+        mode="plan"
     )
 
     plans = plan_response.get("plans", [])
@@ -31,9 +32,10 @@ def execute_command(request: ExecuteRequest):
             results.append({"plan": plan, "error": str(e)})
 
     final_summary = agent.process_request(
-        message="Generate a summary of actions taken",
+        message="Summarize actions taken",
         user_id=user_id,
-        context=result_context
+        context=result_context,
+        mode="summarize"
     )
 
     return {
