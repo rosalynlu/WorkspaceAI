@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from uuid import uuid4
 from datetime import datetime
 
-from models.user import UserCreate
+from models.user import UserCreate, UserInDB
 from utils.security import hash_password
 from db import users_collection
 
@@ -16,12 +16,14 @@ def register_user(user: UserCreate):
 
     user_id = str(uuid4())
 
-    users_collection.insert_one({
-        "user_id": user_id,
-        "username": user.username,
-        "password_hash": hash_password(user.password),
-        "email": user.email,
-        "created_at": datetime.utcnow()
-    })
+    user_in_db = UserInDB(
+        user_id=user_id,
+        username=user.username,
+        password_hash=hash_password(user.password),
+        email=user.email,
+        created_at=datetime.utcnow(),
+    )
+
+    users_collection.insert_one(user_in_db.model_dump())
 
     return {"status": "registered", "user_id": user_id}
