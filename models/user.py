@@ -10,4 +10,5 @@ class UserInDB(BaseModel):
     user_id: str
     username: str
     password_hash: str
+    email: EmailStr | None = None
     created_at: datetime
