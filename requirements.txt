@@ -1,0 +1,17 @@
+fastapi
+fastapi[standard]
+uvicorn
+openai
+pydantic
+pydantic-settings
+python-dotenv
+google-api-python-client
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+pymongo
+email-validator
+certifi
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+requests
