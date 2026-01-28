@@ -8,4 +8,7 @@ class Settings(BaseSettings):
     GOOGLE_TOKEN_JSON_PATH: str
     MONGODB_URL: str
 
+    GOOGLE_CLIENT_ID: str | None = None
+    GOOGLE_CLIENT_SECRET: str | None = None
+
 settings = Settings()

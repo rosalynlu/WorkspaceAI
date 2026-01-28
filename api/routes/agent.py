@@ -11,16 +11,16 @@ def execute_command(request: ExecuteRequest):
     message = request.message
     user_id = request.user_id
 
-    # 1️⃣ Validate user exists
+    # validate user exists
     user = users_collection.find_one({"user_id": user_id})
     if not user:
         raise HTTPException(status_code=404, detail=f"User '{user_id}' not found")
 
-    # 2️⃣ Initialize agent and context
+    # initialize agent and context
     agent = Agent()
     result_context = [{"role": "user", "content": message}]
 
-    # 3️⃣ Get planning response from AI
+    # get planning response from AI
     try:
         plan_response = agent.process_request(
             message=message,
@@ -31,7 +31,7 @@ def execute_command(request: ExecuteRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent planning failed: {str(e)}")
 
-    # 4️⃣ Validate plans
+    # validate plans
     plans = plan_response.get("plans", [])
     if not isinstance(plans, list):
         raise HTTPException(status_code=500, detail="Agent returned invalid 'plans' format")
@@ -39,7 +39,7 @@ def execute_command(request: ExecuteRequest):
     results = []
 
     for plan in plans:
-        # Validate each plan
+        # validate each plan
         if not isinstance(plan, dict):
             results.append({"plan": plan, "error": "Plan is not a dictionary"})
             continue
@@ -55,7 +55,7 @@ def execute_command(request: ExecuteRequest):
             results.append({"plan": plan, "error": "Arguments must be a dictionary"})
             continue
 
-        # 5️⃣ Execute tool safely
+        # execute tool safely
         try:
             res = execute_tool(plan)
             results.append({"plan": plan, "result": res})
@@ -64,7 +64,7 @@ def execute_command(request: ExecuteRequest):
         except Exception as e:
             results.append({"plan": plan, "error": str(e)})
 
-    # 6️⃣ Final summary from AI
+    # final summary from AI
     try:
         final_summary = agent.process_request(
             message="Summarize actions taken",
