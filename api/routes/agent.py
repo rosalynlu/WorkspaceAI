@@ -21,6 +21,31 @@ def execute_command(request: ExecuteRequest):
     result_context = [{"role": "user", "content": message}]
 
     # get planning response from AI
+    # 2a️⃣ Decide between chat vs action
+    try:
+        intent_payload = agent.process_request(
+            message=message,
+            user_id=user_id,
+            context=result_context,
+            mode="classify",
+        )
+    except Exception:
+        intent_payload = {}
+
+    if intent_payload.get("intent") == "chat":
+        chat_reply = agent.process_request(
+            message=message,
+            user_id=user_id,
+            context=result_context,
+            mode="chat",
+        )
+        return {
+            "status": "completed",
+            "results": [],
+            "summary": chat_reply.get("message", ""),
+        }
+
+    # 3️⃣ Get planning response from AI
     try:
         plan_response = agent.process_request(
             message=message,
@@ -57,10 +82,10 @@ def execute_command(request: ExecuteRequest):
 
         # execute tool safely
         try:
-            res = execute_tool(plan)
+            res = execute_tool(plan, user_id=user_id)
             results.append({"plan": plan, "result": res})
-            # Add tool output to context
-            result_context.append({"role": "tool", "content": res})
+            # Add tool output to context as assistant text (no tool_calls in this flow)
+            result_context.append({"role": "assistant", "content": {"tool_result": res}})
         except Exception as e:
             results.append({"plan": plan, "error": str(e)})
 
