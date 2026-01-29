@@ -11,13 +11,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from config import settings
 
 SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/calendar.events"
+    "https://www.googleapis.com/auth/calendar.events",
 ]
 
 _creds_cache = {}
-
 
 def _load_client_config():
     if os.path.exists("credentials.json"):
@@ -25,7 +27,6 @@ def _load_client_config():
             payload = json.load(handle)
         return payload.get("web") or payload.get("installed") or {}
     return {}
-
 
 def _get_creds_from_db(user_id: str):
     from db import users_collection
@@ -58,7 +59,6 @@ def _get_creds_from_db(user_id: str):
         )
     return creds
 
-
 def _get_creds(user_id: str | None = None):
     if user_id:
         cached = _creds_cache.get(user_id)
@@ -90,7 +90,6 @@ def _get_creds(user_id: str | None = None):
         f"{settings.GOOGLE_TOKEN_JSON_PATH} or set GOOGLE_OAUTH_LOCAL_SERVER=1 to run auth."
     )
 
-
 # ------------------- Tools -------------------
 
 def create_email(to: str, subject: str, body: str, user_id: str | None = None):
@@ -113,7 +112,6 @@ def create_doc(title: str, content: str = "", user_id: str | None = None):
         service.documents().batchUpdate(documentId=doc_id, body={"requests": requests}).execute()
     return {"doc_id": doc_id, "title": title}
 
-
 def create_calendar_event(summary: str, start_time: str = None, user_id: str | None = None):
     service = build("calendar", "v3", credentials=_get_creds(user_id))
     if not start_time:
@@ -128,7 +126,6 @@ def create_calendar_event(summary: str, start_time: str = None, user_id: str | N
     }
     created = service.events().insert(calendarId="primary", body=event).execute()
     return {"event_id": created["id"], "summary": summary}
-
 
 def execute_tool(plan: dict, user_id: str | None = None):
     fn = plan["function_name"]

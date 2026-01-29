@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from uuid import uuid4
 from datetime import datetime
@@ -20,6 +21,9 @@ class GoogleTokenRequest(BaseModel):
     id_token: str
 
 SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile",
     "https://www.googleapis.com/auth/gmail.send",
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/calendar.events",
@@ -27,6 +31,10 @@ SCOPES = [
 
 DEFAULT_REDIRECT_URI = os.getenv(
     "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8000/auth/google/callback"
+)
+
+FRONTEND_REDIRECT_URL = os.getenv(
+    "FRONTEND_REDIRECT_URL", "http://localhost:5173"
 )
 
 def _load_client_config():
@@ -189,8 +197,13 @@ def google_callback(code: str, state: str | None = None, user_id: str | None = N
         upsert=True,
     )
 
-    return {"status": "connected", "user_id": resolved_user_id}
+    redirect_url = (
+        f"{FRONTEND_REDIRECT_URL}"
+        f"?google_connected=1"
+        f"&user_id={resolved_user_id}"
+    )
 
+    return RedirectResponse(url=redirect_url, status_code=302)
 
 @router.get("/google/status")
 def google_status(user_id: str):

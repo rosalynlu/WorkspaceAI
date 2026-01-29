@@ -21,7 +21,6 @@ GOOGLE_CLIENT_ID = None
 GOOGLE_CLIENT_SECRET = None
 GOOGLE_REDIRECT_URI = "http://localhost:8000/auth/google/callback"
 
-
 @router.post("/google/login")
 def google_login(payload: GoogleLoginRequest):
     global GOOGLE_CLIENT_ID
@@ -39,7 +38,6 @@ def google_login(payload: GoogleLoginRequest):
         return {"status": "ok", "email": info.get("email"), "sub": info.get("sub")}
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid ID token: {str(e)}")
-
 
 @router.post("/google/exchange")
 def google_exchange(payload: GoogleExchangeRequest):
