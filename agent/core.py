@@ -11,6 +11,8 @@ from config import settings
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
+# TODO: need confirmation for take action chat response
+# if plan mode gives back a list of actions, we should ask the user first? 
 class Agent:
     def process_request(
         self,
@@ -37,6 +39,7 @@ class Agent:
         elif mode == "chat":
             prompt = CHAT_PROMPT.format(message=message)
         elif mode == "create_email":
+            # Move all prompts into the prompts.py file unless it can NOT be moved.
             prompt = f"""
             Write an email.
             Must start with 'Dear ...'
@@ -47,6 +50,7 @@ class Agent:
         else:
             prompt = message
 
+        # stateless
         response = client.chat.completions.create(
             model="gpt-4.1",                                    # which model
             messages=[                                          # full conversation context

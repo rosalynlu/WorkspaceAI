@@ -11,6 +11,19 @@ def execute_command(request: ExecuteRequest):
     message = request.message
     user_id = request.user_id
 
+    # Security concern: anyone can use your /respond as long as they have your user_id. 
+
+    # user signs in (username/password, sign in with Google/Apple -> once verified -> have a new API /token that issues Bearer token returned 
+    # back to the client/frontend) -> frontend should save that token as a cookie, or session or whatever -> fronted will use the token
+    # to make ant authorized API call such asthe /respond. Bearer token 
+
+    # token: should contain user info such as user_id
+
+    # http_request: Request
+    # http_request.headers.get("authorization") -> returns the token that contains user_id info. 
+
+    # DROP ExecuteRequest
+
     # validate user exists
     user = users_collection.find_one({"user_id": user_id})
     if not user:
@@ -63,6 +76,9 @@ def execute_command(request: ExecuteRequest):
 
     results = []
 
+    # TODO: need confirmation for take action chat response
+    # if plan mode gives back a list of actions, we should ask the user first? 
+    
     for plan in plans:
         # validate each plan
         if not isinstance(plan, dict):
