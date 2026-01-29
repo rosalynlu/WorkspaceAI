@@ -7,6 +7,7 @@ You MUST:
 - Return structured JSON
 """
 
+# Improve PLANNING_PROMPT to handle free chat and take action chat
 PLANNING_PROMPT = """
 User request:
 {message}
@@ -36,6 +37,7 @@ Return JSON in the following format:
 }}
 """
 
+# DROP the classify prompt and keep the PLANNING one
 CLASSIFY_PROMPT = """
 User message:
 {message}
