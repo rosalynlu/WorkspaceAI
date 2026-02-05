@@ -12,3 +12,4 @@ db = client["workspace_ai"]
 
 users_collection = db["users"]
 messages_collection = db["messages"]
+action_requests_collection = db["action_requests"]

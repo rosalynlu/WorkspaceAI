@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     GOOGLE_OAUTH_CLIENT_ID: str = ""
     FRONTEND_ORIGINS: str = "http://localhost:5173"
 
+    JWT_SECRET: str = "dev-secret"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7
+
 settings = Settings()
 
 if not settings.GOOGLE_OAUTH_CLIENT_ID:

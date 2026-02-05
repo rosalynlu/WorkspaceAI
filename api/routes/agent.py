@@ -1,108 +1,123 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from agent.core import Agent
 from agent.tools import execute_tool
 from agent.schemas import ExecuteRequest
-from db import users_collection
+from dependencies.auth import get_current_user_id
+from services.messages import create_message
+from services.action_requests import create_action_request
 
 router = APIRouter()
 
+# any tool here causes real side effects -> ALWAYS require confirmation server-side
+SIDE_EFFECT_TOOLS = {"create_email", "create_doc", "create_calendar_event"}
+
+
+def _needs_confirmation(plans: list) -> bool:
+    """Enforce confirmation for any side-effect tool, regardless of what the model says."""
+    for plan in plans:
+        if isinstance(plan, dict) and plan.get("function_name") in SIDE_EFFECT_TOOLS:
+            return True
+    return False
+
+
 @router.post("/respond")
-def execute_command(request: ExecuteRequest):
-    message = request.message
-    user_id = request.user_id
+def execute_command(request: ExecuteRequest, user_id: str = Depends(get_current_user_id)):
+    message = request.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
 
-    # validate user exists
-    user = users_collection.find_one({"user_id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail=f"User '{user_id}' not found")
+    # log user message (audit trail)
+    create_message(user_id, "user", message)
 
-    # initialize agent and context
     agent = Agent()
-    result_context = [{"role": "user", "content": message}]
+    context = [{"role": "user", "content": message}]
 
-    # get planning response from AI
-    # 2a️⃣ Decide between chat vs action
-    try:
-        intent_payload = agent.process_request(
-            message=message,
-            user_id=user_id,
-            context=result_context,
-            mode="classify",
-        )
-    except Exception:
-        intent_payload = {}
-
-    if intent_payload.get("intent") == "chat":
-        chat_reply = agent.process_request(
-            message=message,
-            user_id=user_id,
-            context=result_context,
-            mode="chat",
-        )
-        return {
-            "status": "completed",
-            "results": [],
-            "summary": chat_reply.get("message", ""),
-        }
-
-    # 3️⃣ Get planning response from AI
+    # single plan call (no classify)
     try:
         plan_response = agent.process_request(
             message=message,
             user_id=user_id,
-            context=result_context,
-            mode="plan"
+            context=context,
+            mode="plan",
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Agent planning failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Agent planning failed: {e}")
 
-    # validate plans
+    intent = plan_response.get("intent")
+    if intent == "chat":
+        reply = plan_response.get("message", "") or ""
+        create_message(user_id, "assistant", reply)
+        return {"status": "completed", "results": [], "summary": reply}
+
+    if intent != "action":
+        raise HTTPException(status_code=500, detail="Agent returned invalid intent")
+
     plans = plan_response.get("plans", [])
-    if not isinstance(plans, list):
-        raise HTTPException(status_code=500, detail="Agent returned invalid 'plans' format")
+    if not isinstance(plans, list) or not plans:
+        raise HTTPException(status_code=500, detail="Agent returned no plans")
 
+    # SERVER-ENFORCED CONFIRMATION: do not trust the model to decide this.
+    requires_confirmation = _needs_confirmation(plans)
+
+    confirmation_message = (
+        plan_response.get("confirmation_message")
+        or "I’m ready to do that. Do you want me to proceed?"
+    )
+
+    # confirmation path (store pending action request, do not execute yet)
+    if requires_confirmation:
+        action_request_id = create_action_request(
+            user_id=user_id,
+            user_message=message,
+            plans=plans,
+            confirmation_message=confirmation_message,
+        )
+
+        create_message(
+            user_id,
+            "assistant",
+            f"{confirmation_message}\n\nReply with /confirm {action_request_id} to proceed, or /cancel {action_request_id}.",
+        )
+
+        return {
+            "status": "needs_confirmation",
+            "action_request_id": action_request_id,
+            "confirmation_message": confirmation_message,
+            "plans": plans,
+        }
+
+    # execute immediately (only for non-side-effect actions; can add read-only tools later)
     results = []
-
     for plan in plans:
-        # validate each plan
         if not isinstance(plan, dict):
             results.append({"plan": plan, "error": "Plan is not a dictionary"})
             continue
 
         fn = plan.get("function_name")
         args = plan.get("arguments", {})
-
-        if not fn:
-            results.append({"plan": plan, "error": "Missing function_name"})
+        if not fn or not isinstance(args, dict):
+            results.append({"plan": plan, "error": "Invalid plan shape"})
             continue
 
-        if not isinstance(args, dict):
-            results.append({"plan": plan, "error": "Arguments must be a dictionary"})
-            continue
-
-        # execute tool safely
         try:
             res = execute_tool(plan, user_id=user_id)
             results.append({"plan": plan, "result": res})
-            # Add tool output to context as assistant text (no tool_calls in this flow)
-            result_context.append({"role": "assistant", "content": {"tool_result": res}})
+            create_message(user_id, "tool", {"plan": plan, "result": res})
+            context.append({"role": "assistant", "content": {"tool_result": res}})
         except Exception as e:
             results.append({"plan": plan, "error": str(e)})
 
-    # final summary from AI
+    # summarize
     try:
         final_summary = agent.process_request(
             message="Summarize actions taken",
             user_id=user_id,
-            context=result_context,
-            mode="summarize"
+            context=context,
+            mode="summarize",
         )
-        summary_text = final_summary.get("message", "")
+        summary_text = final_summary.get("message", "") or ""
     except Exception as e:
-        summary_text = f"Summary generation failed: {str(e)}"
+        summary_text = f"Summary generation failed: {e}"
 
-    return {
-        "status": "completed",
-        "results": results,
-        "summary": summary_text
-    }
+    create_message(user_id, "assistant", summary_text)
+    return {"status": "completed", "results": results, "summary": summary_text}

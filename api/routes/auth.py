@@ -11,7 +11,8 @@ from google.auth.transport import requests as google_requests
 from google_auth_oauthlib.flow import Flow
 
 from models.user import UserCreate, UserInDB
-from utils.security import hash_password
+from utils.security import hash_password, verify_password
+from utils.jwt import create_access_token
 from db import users_collection
 from config import settings
 
@@ -54,7 +55,6 @@ def _load_client_config():
             continue
     return {}
 
-
 def _build_web_config():
     client_config = _load_client_config()
     return {
@@ -84,6 +84,22 @@ def register_user(user: UserCreate):
 
     return {"status": "registered", "user_id": user_id}
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@router.post("/login")
+def login(payload: LoginRequest):
+    user = users_collection.find_one({"username": payload.username})
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    stored_hash = user.get("password_hash") or ""
+    if not stored_hash or not verify_password(payload.password, stored_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    token = create_access_token(user["user_id"])
+    return {"status": "ok", "access_token": token, "user_id": user["user_id"]}
 
 @router.post("/google")
 def verify_google_token(payload: GoogleTokenRequest):
@@ -119,9 +135,12 @@ def verify_google_token(payload: GoogleTokenRequest):
             }
         )
 
+    token = create_access_token(user_id)
+
     return {
         "status": "verified",
         "user_id": user_id,
+        "access_token": token,
         "sub": id_info.get("sub"),
         "email": email,
         "email_verified": id_info.get("email_verified"),
@@ -130,7 +149,6 @@ def verify_google_token(payload: GoogleTokenRequest):
         "given_name": id_info.get("given_name"),
         "family_name": id_info.get("family_name"),
     }
-
 
 @router.get("/google/authorize")
 def google_authorize(user_id: str):
@@ -153,7 +171,6 @@ def google_authorize(user_id: str):
         state=user_id,
     )
     return {"auth_url": auth_url}
-
 
 @router.get("/google/callback")
 def google_callback(code: str, state: str | None = None, user_id: str | None = None):

@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from api.routes.agent import router as agent_router
 from api.routes.auth import router as auth_router
+from api.routes.messages import router as messages_router
+from api.routes.confirm import router as confirm_router
+
 from config import settings
 
 app = FastAPI(title="AI Workspace Automation Agent", version="0.1.0")
@@ -17,6 +21,8 @@ app.add_middleware(
 )
 
 app.include_router(agent_router, prefix="/api")
+app.include_router(messages_router, prefix="/api")
+app.include_router(confirm_router, prefix="/api")
 app.include_router(auth_router, prefix="/auth")
 
 
